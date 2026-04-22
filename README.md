@@ -1,6 +1,6 @@
 ---
 title: Hugging8n
-emoji: ♾️
+emoji: 🔗
 colorFrom: blue
 colorTo: indigo
 sdk: docker
@@ -12,7 +12,7 @@ secrets:
     description: HuggingFace token with write access. Used for automatic backup.
 ---
 
-# ♾️ Hugging8n
+# 🔗 Hugging8n
 
 **Self-hosted n8n workflow automation — free, no server needed.** Hugging8n runs [n8n](https://n8n.io) on HuggingFace Spaces Docker, serving a premium dashboard at `/` and the n8n editor at `/app/`.
 
@@ -42,6 +42,7 @@ When the Space starts, visit the URL and click **Open n8n Editor**. On the first
 ## 🔐 Authentication
 
 Hugging8n uses n8n's native user management.
+
 1. The first person to visit `/app/` on a fresh install becomes the owner.
 2. If you are restoring from a backup, your existing user accounts will be active.
 

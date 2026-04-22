@@ -1,19 +1,22 @@
 # Contributing to Hugging8n
 
-Thanks for your interest in contributing! ♾️
+Thanks for your interest in contributing! 🔗
 
 ## How to Contribute
 
 ### Bug Reports
+
 - Open an issue with a clear description
 - Include your HF Space logs if possible
 - Mention the n8n version you're using (check Space logs on startup)
 
 ### Feature Requests
+
 - Open an issue with the `enhancement` label
 - Describe the use case — why is this needed?
 
 ### Pull Requests
+
 1. Fork the repo
 2. Create a feature branch: `git checkout -b feature/my-feature`
 3. Make your changes
@@ -22,11 +25,13 @@ Thanks for your interest in contributing! ♾️
 6. Push and open a PR
 
 ### Code Style
+
 - Shell scripts: use `set -e`, quote variables, comment non-obvious logic
 - Keep it simple — this project should stay easy to understand
 - No unnecessary dependencies
 
 ### Testing
+
 - Test with and without `HF_TOKEN` (backup enabled and disabled)
 - Test with and without `N8N_BASIC_AUTH_ACTIVE`
 - Verify the `/health` endpoint responds correctly

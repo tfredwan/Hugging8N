@@ -24,18 +24,27 @@ function getStatus() {
       return JSON.parse(fs.readFileSync(SYNC_STATUS_FILE, "utf8"));
     }
   } catch {}
-  return { status: "unknown", message: "Initial startup...", timestamp: new Date().toISOString() };
+  return {
+    status: "unknown",
+    message: "Initial startup...",
+    timestamp: new Date().toISOString(),
+  };
 }
 
 function renderDashboard(data) {
   const syncBadge = (status) => {
     let cls = "status-offline";
-    if (status === "success" || status === "configured" || status === "restored") cls = "status-online";
+    if (
+      status === "success" ||
+      status === "configured" ||
+      status === "restored"
+    )
+      cls = "status-online";
     if (status === "syncing" || status === "restoring") cls = "status-syncing";
-    return `<div class="status-badge ${cls}">${cls === 'status-online' ? '<div class="pulse"></div>' : ''}${String(status).toUpperCase()}</div>`;
+    return `<div class="status-badge ${cls}">${cls === "status-online" ? '<div class="pulse"></div>' : ""}${String(status).toUpperCase()}</div>`;
   };
 
-  const keepAwakeHtml = data.isPrivate 
+  const keepAwakeHtml = data.isPrivate
     ? `<div class="helper-summary"><strong>Private Space detected.</strong> External monitors cannot access private health URLs.</div>`
     : `
         <div id="uptimerobot-flow">
@@ -87,7 +96,7 @@ function renderDashboard(data) {
 </head>
 <body>
     <div class="dashboard">
-        <h1>♾️ Hugging8n</h1>
+        <h1>🔗 Hugging8n</h1>
         <p class="subtitle">Workflow Automation Space</p>
         
         <div class="stats">
@@ -163,16 +172,30 @@ async function resolveSpaceIsPrivate(req) {
   const token = params.get("__sign");
   if (!token) return false;
   try {
-    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
+    const payload = JSON.parse(
+      Buffer.from(token.split(".")[1], "base64").toString(),
+    );
     const sub = payload.sub || "";
     const match = sub.match(/^\/spaces\/([^/]+)\/([^/]+)$/);
     if (!match) return false;
     return new Promise((resolve) => {
-      https.get(`https://huggingface.co/api/spaces/${match[1]}/${match[2]}`, { headers: { "User-Agent": "Hugging8n" } }, (res) => {
-        resolve(res.statusCode === 401 || res.statusCode === 403 || res.statusCode === 404);
-      }).on("error", () => resolve(false));
+      https
+        .get(
+          `https://huggingface.co/api/spaces/${match[1]}/${match[2]}`,
+          { headers: { "User-Agent": "Hugging8n" } },
+          (res) => {
+            resolve(
+              res.statusCode === 401 ||
+                res.statusCode === 403 ||
+                res.statusCode === 404,
+            );
+          },
+        )
+        .on("error", () => resolve(false));
     });
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -186,36 +209,79 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/status") {
     const uptime = Math.floor((Date.now() - startTime) / 1000);
-    return res.end(JSON.stringify({
-      uptime: `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`,
-      sync: getStatus()
-    }));
+    return res.end(
+      JSON.stringify({
+        uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
+        sync: getStatus(),
+      }),
+    );
   }
 
   if (pathname === "/uptimerobot/setup" && req.method === "POST") {
     let body = "";
-    req.on("data", c => body += c);
+    req.on("data", (c) => (body += c));
     req.on("end", async () => {
       try {
         const { apiKey } = JSON.parse(body);
         const host = req.headers.host;
         const monitorUrl = `https://${host}/health`;
-        const post = (p, d) => new Promise((res, rej) => {
-          const r = https.request({ hostname: "api.uptimerobot.com", port: 443, path: p, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } }, r => {
-            let b = ""; r.on("data", c => b += c); r.on("end", () => res(JSON.parse(b)));
-          }); r.on("error", rej); r.write(new URLSearchParams(d).toString()); r.end();
+        const post = (p, d) =>
+          new Promise((res, rej) => {
+            const r = https.request(
+              {
+                hostname: "api.uptimerobot.com",
+                port: 443,
+                path: p,
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/x-www-form-urlencoded",
+                },
+              },
+              (r) => {
+                let b = "";
+                r.on("data", (c) => (b += c));
+                r.on("end", () => res(JSON.parse(b)));
+              },
+            );
+            r.on("error", rej);
+            r.write(new URLSearchParams(d).toString());
+            r.end();
+          });
+
+        const existing = await post("/v2/getMonitors", {
+          api_key: apiKey,
+          format: "json",
         });
-        
-        const existing = await post("/v2/getMonitors", { api_key: apiKey, format: "json" });
-        if (existing.monitors?.some(m => m.url === monitorUrl)) {
-          res.writeHead(200); return res.end(JSON.stringify({ message: "Monitor already exists." }));
+        if (existing.monitors?.some((m) => m.url === monitorUrl)) {
+          res.writeHead(200);
+          return res.end(
+            JSON.stringify({ message: "Monitor already exists." }),
+          );
         }
-        const created = await post("/v2/newMonitor", { api_key: apiKey, format: "json", type: "1", friendly_name: `Hugging8n ${host}`, url: monitorUrl, interval: "300" });
+        const created = await post("/v2/newMonitor", {
+          api_key: apiKey,
+          format: "json",
+          type: "1",
+          friendly_name: `Hugging8n ${host}`,
+          url: monitorUrl,
+          interval: "300",
+        });
         if (created.stat === "ok") {
-          res.writeHead(200); return res.end(JSON.stringify({ message: "Monitor created successfully!" }));
+          res.writeHead(200);
+          return res.end(
+            JSON.stringify({ message: "Monitor created successfully!" }),
+          );
         }
-        res.writeHead(400); res.end(JSON.stringify({ message: created.error?.message || "Failed to create monitor." }));
-      } catch (e) { res.writeHead(400); res.end(JSON.stringify({ message: "Invalid request." })); }
+        res.writeHead(400);
+        res.end(
+          JSON.stringify({
+            message: created.error?.message || "Failed to create monitor.",
+          }),
+        );
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ message: "Invalid request." }));
+      }
     });
     return;
   }
@@ -224,25 +290,46 @@ const server = http.createServer(async (req, res) => {
     const uptime = Math.floor((Date.now() - startTime) / 1000);
     const isPrivate = await resolveSpaceIsPrivate(req);
     res.writeHead(200, { "Content-Type": "text/html" });
-    return res.end(renderDashboard({
-      uptimeHuman: `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`,
-      sync: getStatus(),
-      isPrivate
-    }));
+    return res.end(
+      renderDashboard({
+        uptimeHuman: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
+        sync: getStatus(),
+        isPrivate,
+      }),
+    );
   }
 
   // Proxy to n8n (pass full path as n8n is configured with N8N_PATH=/app/)
   const proxyPath = pathname;
-  const proxyHeaders = { ...req.headers, host: `127.0.0.1:${TARGET_PORT}`, "x-forwarded-for": req.socket.remoteAddress, "x-forwarded-proto": "https" };
-  
-  const proxyReq = http.request({ hostname: TARGET_HOST, port: TARGET_PORT, path: proxyPath + url.search, method: req.method, headers: proxyHeaders }, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
-    proxyRes.pipe(res);
-  });
+  const proxyHeaders = {
+    ...req.headers,
+    host: `127.0.0.1:${TARGET_PORT}`,
+    "x-forwarded-for": req.socket.remoteAddress,
+    "x-forwarded-proto": "https",
+  };
+
+  const proxyReq = http.request(
+    {
+      hostname: TARGET_HOST,
+      port: TARGET_PORT,
+      path: proxyPath + url.search,
+      method: req.method,
+      headers: proxyHeaders,
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res);
+    },
+  );
 
   proxyReq.on("error", () => {
     res.writeHead(503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "starting", message: "n8n is initializing, please wait..." }));
+    res.end(
+      JSON.stringify({
+        status: "starting",
+        message: "n8n is initializing, please wait...",
+      }),
+    );
   });
 
   req.pipe(proxyReq);
@@ -252,9 +339,11 @@ server.on("upgrade", (req, socket, head) => {
   const url = parseRequestUrl(req.url);
   const proxyPath = url.pathname;
   const proxySocket = net.connect(TARGET_PORT, TARGET_HOST, () => {
-    proxySocket.write(`${req.method} ${proxyPath}${url.search} HTTP/${req.httpVersion}\r\n`);
+    proxySocket.write(
+      `${req.method} ${proxyPath}${url.search} HTTP/${req.httpVersion}\r\n`,
+    );
     for (let i = 0; i < req.rawHeaders.length; i += 2) {
-      proxySocket.write(`${req.rawHeaders[i]}: ${req.rawHeaders[i+1]}\r\n`);
+      proxySocket.write(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`);
     }
     proxySocket.write("\r\n");
     if (head && head.length) proxySocket.write(head);
@@ -263,4 +352,6 @@ server.on("upgrade", (req, socket, head) => {
   proxySocket.on("error", () => socket.destroy());
 });
 
-server.listen(PORT, "0.0.0.0", () => console.log(`Dashboard/Proxy on ${PORT} -> n8n on ${TARGET_PORT}`));
+server.listen(PORT, "0.0.0.0", () =>
+  console.log(`Dashboard/Proxy on ${PORT} -> n8n on ${TARGET_PORT}`),
+);
