@@ -15,10 +15,12 @@ mkdir -p "$N8N_HOME"
 SPACE_HOST_DETECTED="${SPACE_HOST_OVERRIDE:-${SPACE_HOST:-}}"
 if [ -n "$SPACE_HOST_DETECTED" ]; then
   export N8N_HOST="${N8N_HOST:-$SPACE_HOST_DETECTED}"
-  # n8n runs at / internally; proxy handles /app prefix stripping
-  export N8N_PATH="/"
-  export WEBHOOK_URL="${WEBHOOK_URL:-https://${SPACE_HOST_DETECTED}/app/}"
-  export N8N_EDITOR_BASE_URL="${N8N_EDITOR_BASE_URL:-https://${SPACE_HOST_DETECTED}/app/}"
+  # Official n8n subpath configuration
+  export N8N_PATH="/app/"
+  export N8N_PROTOCOL="https"
+  export N8N_HOST="${SPACE_HOST_DETECTED}"
+  export WEBHOOK_URL="https://${SPACE_HOST_DETECTED}/app/"
+  export N8N_EDITOR_BASE_URL="https://${SPACE_HOST_DETECTED}/app/"
 fi
 
 export N8N_PORT

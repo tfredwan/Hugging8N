@@ -313,22 +313,15 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  // 3. Proxy to n8n (strip /app prefix)
-  let proxyPath = pathname.substring(APP_BASE.length);
-  if (!proxyPath.startsWith("/")) proxyPath = "/" + proxyPath;
-
-  // Handle n8n's common 404 on root / by redirecting to workflows
-  if (proxyPath === "/" && req.method === "GET") {
-    res.writeHead(302, { Location: APP_BASE + "/home/workflows" });
-    return res.end();
-  }
+  // Proxy to n8n (Pass full path as n8n is configured with N8N_PATH=/app/)
+  const proxyPath = pathname;
 
   const proxyHeaders = {
     ...req.headers,
     host: `127.0.0.1:${TARGET_PORT}`,
     "x-forwarded-for": req.socket.remoteAddress,
+    "x-forwarded-host": req.headers.host,
     "x-forwarded-proto": "https",
-    "x-forwarded-prefix": APP_BASE,
   };
 
   const proxyReq = http.request(
@@ -340,10 +333,6 @@ const server = http.createServer(async (req, res) => {
       headers: proxyHeaders,
     },
     (proxyRes) => {
-      // Rewrite Location header for redirects
-      if (proxyRes.headers.location && proxyRes.headers.location.startsWith("/")) {
-        proxyRes.headers.location = APP_BASE + proxyRes.headers.location;
-      }
       res.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.pipe(res);
     },
@@ -364,11 +353,7 @@ const server = http.createServer(async (req, res) => {
 
 server.on("upgrade", (req, socket, head) => {
   const url = parseRequestUrl(req.url);
-  let proxyPath = url.pathname;
-  if (proxyPath.startsWith(APP_BASE)) {
-    proxyPath = proxyPath.substring(APP_BASE.length);
-  }
-  if (!proxyPath.startsWith("/")) proxyPath = "/" + proxyPath;
+  const proxyPath = url.pathname;
 
   const proxySocket = net.connect(TARGET_PORT, TARGET_HOST, () => {
     proxySocket.write(
