@@ -35,6 +35,7 @@ export TZ="${TZ:-$GENERIC_TIMEZONE}"
 
 # Disable noisy or unnecessary services
 export N8N_PYTHON_NODES_ENABLED="${N8N_PYTHON_NODES_ENABLED:-false}"
+export N8N_RUNNERS_MODE="${N8N_RUNNERS_MODE:-external}"
 export N8N_LICENSE_AUTO_RENEW_ENABLED="${N8N_LICENSE_AUTO_RENEW_ENABLED:-false}"
 
 # n8n v2 uses built-in user management.
