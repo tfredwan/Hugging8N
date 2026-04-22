@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     python3 \
     python3-pip \
+    python3-venv \
     sqlite3 \
     tini \
     && pip3 install --no-cache-dir --break-system-packages huggingface_hub \
