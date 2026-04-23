@@ -608,66 +608,41 @@ const server = http.createServer(async (req, res) => {
     );
   }
 
-  // 2. n8n Routing Logic (Namespace-based Proxy)
-  // These are the prefixes n8n uses. If it matches, we proxy to n8n at ROOT.
-  const isN8nPath =
-    pathname.startsWith("/static/") ||
-    pathname.startsWith("/assets/") ||
-    pathname.startsWith("/rest/") ||
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/webhook/") ||
-    pathname.startsWith("/home/") ||
-    pathname.startsWith("/auth/") ||
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/signup") ||
-    pathname.startsWith("/logout") ||
-    pathname.startsWith("/nodes/") ||
-    pathname.startsWith("/templates/") ||
-    pathname.startsWith("/workflow") ||
-    pathname.startsWith("/healthz");
+  // 2. n8n Proxy Logic
+  // Any path that isn't a dashboard route gets proxied to n8n.
+  const proxyHeaders = {
+    ...req.headers,
+    host: `127.0.0.1:${TARGET_PORT}`,
+    "x-forwarded-for": req.socket.remoteAddress,
+    "x-forwarded-host": req.headers.host,
+    "x-forwarded-proto": "https",
+  };
 
+  const proxyReq = http.request(
+    {
+      hostname: TARGET_HOST,
+      port: TARGET_PORT,
+      path: pathname + url.search,
+      method: req.method,
+      headers: proxyHeaders,
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res);
+    },
+  );
 
-
-  if (isN8nPath) {
-    const proxyHeaders = {
-      ...req.headers,
-      host: `127.0.0.1:${TARGET_PORT}`,
-      "x-forwarded-for": req.socket.remoteAddress,
-      "x-forwarded-host": req.headers.host,
-      "x-forwarded-proto": "https",
-    };
-
-    const proxyReq = http.request(
-      {
-        hostname: TARGET_HOST,
-        port: TARGET_PORT,
-        path: pathname + url.search,
-        method: req.method,
-        headers: proxyHeaders,
-      },
-      (proxyRes) => {
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        proxyRes.pipe(res);
-      },
+  proxyReq.on("error", () => {
+    res.writeHead(503, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        status: "starting",
+        message: "n8n is initializing...",
+      }),
     );
+  });
 
-    proxyReq.on("error", () => {
-      res.writeHead(503, { "Content-Type": "application/json" });
-      res.end(
-        JSON.stringify({
-          status: "starting",
-          message: "n8n is initializing...",
-        }),
-      );
-    });
-
-    req.pipe(proxyReq);
-    return;
-  }
-
-  // 3. Fallback: Redirect anything else to Dashboard
-  res.writeHead(302, { Location: "/" });
-  res.end();
+  req.pipe(proxyReq);
 });
 
 server.on("upgrade", (req, socket, head) => {
