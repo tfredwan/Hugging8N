@@ -6,8 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     N8N_PORT=5678 \
     HF_HUB_DISABLE_PROGRESS_BARS=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_ROOT_USER_ACTION=ignore \
-    NODE_OPTIONS="--dns-result-order=ipv4first --require /opt/dns-fix.js"
+    PIP_ROOT_USER_ACTION=ignore
 
 RUN apt-get update && apt-get install -y -q --no-install-recommends \
     ca-certificates \
@@ -31,6 +30,9 @@ WORKDIR /home/node/app
 
 COPY --chown=node:node health-server.js /home/node/app/health-server.js
 COPY --chown=node:node dns-fix.js /opt/dns-fix.js
+
+# Set NODE_OPTIONS after dns-fix.js is copied so it doesn't break npm install during build
+ENV NODE_OPTIONS="--dns-result-order=ipv4first --require /opt/dns-fix.js"
 COPY --chown=node:node n8n-sync.py /home/node/app/n8n-sync.py
 COPY --chown=node:node setup-uptimerobot.sh /home/node/app/setup-uptimerobot.sh
 COPY --chown=node:node start.sh /home/node/app/start.sh
