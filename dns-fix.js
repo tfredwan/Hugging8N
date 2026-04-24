@@ -18,12 +18,32 @@ const http = require("http");
 const https = require("https");
 
 // ── Keep-Alive Fix ────────────────────────────────────────────────────────────
-// Node.js 22 changed the global HTTP/HTTPS agents to default keepAlive=true.
-// On HF Spaces, the internal network proxy silently kills idle TCP sockets
-// after ~60s. When n8n tries to reuse a stale socket it gets ECONNRESET.
-// Disabling keep-alive forces a fresh TCP connection for every request.
 http.globalAgent = new http.Agent({ keepAlive: false });
 https.globalAgent = new https.Agent({ keepAlive: false });
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── TCP Connection Diagnostics ────────────────────────────────────────────────
+// Temporarily patch net.createConnection to log all outgoing TCP connections
+// and their errors so we can identify the exact IP and failure mode.
+const net = require("net");
+const _origConnect = net.createConnection.bind(net);
+net.createConnection = function (options, ...args) {
+  const host = options.host || options;
+  const port = options.port;
+  // Only log external connections (skip loopback)
+  if (host && host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
+    console.error(`[DNS-FIX] TCP connect → ${host}:${port}`);
+    const sock = _origConnect(options, ...args);
+    sock.on("connect", () =>
+      console.error(`[DNS-FIX] TCP connected ✓ ${host}:${port}`),
+    );
+    sock.on("error", (err) =>
+      console.error(`[DNS-FIX] TCP error ✗ ${host}:${port} — ${err.code}: ${err.message}`),
+    );
+    return sock;
+  }
+  return _origConnect(options, ...args);
+};
 // ─────────────────────────────────────────────────────────────────────────────
 
 // In-memory cache for runtime DoH resolutions
