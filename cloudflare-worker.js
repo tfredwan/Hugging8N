@@ -13,11 +13,48 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const targetHost = request.headers.get("x-target-host");
+    const proxySecret = (
+      env.CLOUDFLARE_PROXY_SECRET ||
+      env.PROXY_SHARED_SECRET ||
+      ""
+    ).trim();
+
+    // Secret check is optional: when unset, requests are allowed without x-proxy-key.
+    if (proxySecret) {
+      const providedSecret = request.headers.get("x-proxy-key") || "";
+      if (providedSecret !== proxySecret) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+    }
+
+    const allowedTargetsRaw = (
+      env.ALLOWED_TARGETS ||
+      "api.telegram.org,discord.com,discordapp.com,gateway.discord.gg,status.discord.com"
+    ).trim();
+    const allowProxyAll =
+      String(env.ALLOW_PROXY_ALL || "false").toLowerCase() === "true";
+    const allowedTargets = allowedTargetsRaw
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+
+    const isAllowedHost = (hostname) => {
+      if (!hostname) return false;
+      const normalized = String(hostname).trim().toLowerCase();
+      if (!normalized) return false;
+      if (allowProxyAll) return true;
+      return allowedTargets.some(
+        (domain) => normalized === domain || normalized.endsWith(`.${domain}`),
+      );
+    };
 
     let targetBase = "";
 
     if (targetHost) {
       // Use the host provided in the header (preferred)
+      if (!isAllowedHost(targetHost)) {
+        return new Response("Target host is not allowed.", { status: 403 });
+      }
       targetBase = `https://${targetHost}`;
     } else {
       // Fallback: Guess based on path (legacy support)

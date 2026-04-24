@@ -19,6 +19,7 @@ if (
 }
 
 const DEBUG = process.env.CLOUDFLARE_PROXY_DEBUG === "true";
+const PROXY_SHARED_SECRET = (process.env.CLOUDFLARE_PROXY_SECRET || "").trim();
 
 // Allow user to define what to proxy. Use "*" to proxy everything except internal HF traffic.
 const PROXY_DOMAINS =
@@ -108,6 +109,10 @@ if (PROXY_URL) {
             host: proxy.host,
             "x-target-host": hostname,
           };
+
+          if (PROXY_SHARED_SECRET) {
+            newOptions.headers["x-proxy-key"] = PROXY_SHARED_SECRET;
+          }
 
           // Always use HTTPS for the proxy connection
           return originalHttpsRequest.call(https, newOptions, callback);

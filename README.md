@@ -59,6 +59,7 @@ Navigate to your new Space's **Settings**, scroll down to **Variables and secret
 
 - `HF_TOKEN` – Your HuggingFace token with **Write** access (to enable automatic backup).
 - `CLOUDFLARE_PROXY_URL` – *(Optional but Recommended)* Your Cloudflare Worker URL to bypass platform blocks. check [Setup Guide](#-cloudflare-proxy-setup).
+- `CLOUDFLARE_PROXY_SECRET` – *(Optional, Security Recommended)* Shared secret used between Space and Worker to prevent proxy abuse.
 
 ### Step 3: Deploy & Initialize
 
@@ -87,6 +88,15 @@ Hugging Face Free Tier blocks outgoing connections to some services (Telegram, D
 5. Click on "Deploy" button.
 6. Copy the Worker URL (e.g., `https://h8n-proxy.yourname.workers.dev`).
 7. Add this URL as the `CLOUDFLARE_PROXY_URL` secret in your Hugging8n Space settings.
+8. (Optional, Recommended) In Cloudflare Worker settings, add a secret binding named `CLOUDFLARE_PROXY_SECRET`.
+9. (Optional, Recommended) Add the same value in your Space secrets as `CLOUDFLARE_PROXY_SECRET`.
+
+If you skip steps 8-9, proxying still works. The secret simply adds request authentication between your app and worker.
+
+Optional Worker vars for tighter control:
+
+- `ALLOWED_TARGETS` (comma-separated, defaults to Telegram/Discord hosts)
+- `ALLOW_PROXY_ALL` (`false` by default; set `true` only if you fully trust your setup)
 
 ## 💾 Persistent Backup
 
@@ -120,7 +130,11 @@ Customize your instance with these environment variables:
 | `GENERIC_TIMEZONE` | `UTC` | Timezone for your n8n instance |
 | `N8N_LOG_LEVEL` | `error` | Set to `info` or `debug` for more details |
 | `CLOUDFLARE_PROXY_DOMAINS` | (default list) | Comma-separated domains to proxy (or `*` for all) |
+| `CLOUDFLARE_PROXY_SECRET` | — | Optional shared secret for app-to-worker proxy authentication |
 | `SPACE_HOST_OVERRIDE` | — | Override detected host for custom domains |
+| `N8N_STARTUP_TIMEOUT` | `180` | Max seconds to wait for n8n readiness before fail-fast |
+| `UPTIMEROBOT_SETUP_ENABLED` | `true` | Enable/disable dashboard helper endpoint |
+| `UPTIMEROBOT_RATE_LIMIT_PER_MINUTE` | `5` | Per-IP rate limit for helper endpoint |
 
 ## 💻 Local Development
 

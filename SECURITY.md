@@ -15,10 +15,12 @@ We'll respond within 48 hours and work on a fix.
 When deploying Hugging8n:
 
 - **Enable basic auth** — set `N8N_BASIC_AUTH_USER` and `N8N_BASIC_AUTH_PASSWORD` to protect your n8n instance from unauthorized access
-- **Use a strong password** — generate with `openssl rand -base64 24`
+- **Create a strong n8n owner password** during first-run setup
 - **Set your Space to Private** — prevents unauthorized access to your n8n instance from the web
 - **Keep your HF token scoped** — use fine-grained tokens with minimum permissions (read/write to your backup dataset only)
 - **Set a strong `N8N_ENCRYPTION_KEY`** — protects your stored credentials; if lost, credentials cannot be recovered
+- **Optionally set `CLOUDFLARE_PROXY_SECRET` in both Space and Worker** — recommended to prevent Worker URL abuse as an open proxy
+- **Keep secure cookies enabled on HTTPS** — default is secure in this project; only disable for local non-HTTPS testing
 - **Don't commit `.env` files** — the `.gitignore` already excludes them
 - **Review n8n credentials** — periodically audit credentials stored in n8n
 

@@ -8,6 +8,14 @@ const TARGET_PORT = Number(process.env.N8N_PORT || 5678);
 const TARGET_HOST = "127.0.0.1";
 const SYNC_STATUS_FILE = "/tmp/hugging8n-sync-status.json";
 const startTime = Date.now();
+const UPTIMEROBOT_SETUP_ENABLED =
+  String(process.env.UPTIMEROBOT_SETUP_ENABLED || "true").toLowerCase() ===
+  "true";
+const UPTIMEROBOT_RATE_WINDOW_MS = 60 * 1000;
+const UPTIMEROBOT_RATE_MAX = Number(
+  process.env.UPTIMEROBOT_RATE_LIMIT_PER_MINUTE || 5,
+);
+const uptimerobotRateMap = new Map();
 
 function parseRequestUrl(url) {
   try {
@@ -28,6 +36,60 @@ function getStatus() {
     message: "Initial startup...",
     timestamp: new Date().toISOString(),
   };
+}
+
+function probeN8nHealth(timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const request = http.get(
+      {
+        hostname: TARGET_HOST,
+        port: TARGET_PORT,
+        path: "/healthz",
+        timeout: timeoutMs,
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode >= 200 && response.statusCode < 400);
+      },
+    );
+    request.on("timeout", () => {
+      request.destroy();
+      resolve(false);
+    });
+    request.on("error", () => resolve(false));
+  });
+}
+
+function getRequesterIp(req) {
+  return (
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    req.socket.remoteAddress ||
+    "unknown"
+  );
+}
+
+function isRateLimited(req) {
+  const now = Date.now();
+  const ip = getRequesterIp(req);
+  const bucket = uptimerobotRateMap.get(ip) || [];
+  const recent = bucket.filter((ts) => now - ts < UPTIMEROBOT_RATE_WINDOW_MS);
+  recent.push(now);
+  uptimerobotRateMap.set(ip, recent);
+  return recent.length > UPTIMEROBOT_RATE_MAX;
+}
+
+function isAllowedUptimeSetupOrigin(req) {
+  const host = String(req.headers.host || "").toLowerCase();
+  const origin = String(req.headers.origin || "").toLowerCase();
+  const referer = String(req.headers.referer || "").toLowerCase();
+  if (!host) return false;
+  if (origin && !origin.includes(host)) return false;
+  if (referer && !referer.includes(host)) return false;
+  return true;
+}
+
+function isValidUptimeApiKey(key) {
+  return /^[A-Za-z0-9_-]{20,128}$/.test(String(key || ""));
 }
 
 function renderDashboard(data) {
@@ -523,6 +585,9 @@ async function createUptimeRobotMonitor(apiKey, host) {
   const cleanHost = String(host || "")
     .replace(/^https?:\/\//, "")
     .replace(/\/.*$/, "");
+  if (!cleanHost.endsWith(".hf.space")) {
+    throw new Error("Uptime setup is only supported on .hf.space hosts.");
+  }
   if (!cleanHost) throw new Error("Missing Space host.");
   const monitorUrl = `https://${cleanHost}/health`;
   const existing = await postUptimeRobot("/v2/getMonitors", {
@@ -561,14 +626,23 @@ const server = http.createServer(async (req, res) => {
 
   // 1. Dashboard Routes
   if (pathname === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ status: "ok", ...getStatus() }));
+    const n8nReady = await probeN8nHealth();
+    res.writeHead(n8nReady ? 200 : 503, { "Content-Type": "application/json" });
+    return res.end(
+      JSON.stringify({
+        status: n8nReady ? "ok" : "degraded",
+        n8nReady,
+        ...getStatus(),
+      }),
+    );
   }
   if (pathname === "/status") {
     const uptime = Math.floor((Date.now() - startTime) / 1000);
+    const n8nReady = await probeN8nHealth();
     return res.end(
       JSON.stringify({
         uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
+        n8nReady,
         sync: getStatus(),
       }),
     );
@@ -576,11 +650,30 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/uptimerobot/setup" && req.method === "POST") {
     void (async () => {
       try {
+        if (!UPTIMEROBOT_SETUP_ENABLED) {
+          res.writeHead(403, { "Content-Type": "application/json" });
+          return res.end(
+            JSON.stringify({ message: "Uptime setup is disabled." }),
+          );
+        }
+        if (isRateLimited(req)) {
+          res.writeHead(429, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ message: "Too many requests." }));
+        }
+        if (!isAllowedUptimeSetupOrigin(req)) {
+          res.writeHead(403, { "Content-Type": "application/json" });
+          return res.end(
+            JSON.stringify({ message: "Invalid request origin." }),
+          );
+        }
+
         const body = await readRequestBody(req);
         const { apiKey } = JSON.parse(body || "{}");
-        if (!apiKey) {
+        if (!isValidUptimeApiKey(apiKey)) {
           res.writeHead(400, { "Content-Type": "application/json" });
-          return res.end(JSON.stringify({ message: "API key is required." }));
+          return res.end(
+            JSON.stringify({ message: "A valid API key is required." }),
+          );
         }
         const result = await createUptimeRobotMonitor(apiKey, req.headers.host);
         res.writeHead(200, { "Content-Type": "application/json" });

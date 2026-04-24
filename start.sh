@@ -9,6 +9,7 @@ N8N_HOME="/home/node/.n8n"
 N8N_PORT="${N8N_PORT:-5678}"
 PUBLIC_PORT="${PUBLIC_PORT:-7861}"
 SYNC_INTERVAL="${SYNC_INTERVAL:-180}"
+N8N_STARTUP_TIMEOUT="${N8N_STARTUP_TIMEOUT:-180}"
 
 mkdir -p "$N8N_HOME"
 
@@ -27,7 +28,15 @@ export N8N_PORT
 export N8N_PROTOCOL="${N8N_PROTOCOL:-https}"
 export N8N_PROXY_HOPS="${N8N_PROXY_HOPS:-1}"
 export N8N_LISTEN_ADDRESS="${N8N_LISTEN_ADDRESS:-0.0.0.0}"
-export N8N_SECURE_COOKIE="${N8N_SECURE_COOKIE:-false}"
+if [ -z "${N8N_SECURE_COOKIE:-}" ]; then
+  if [ "${N8N_PROTOCOL}" = "https" ]; then
+    export N8N_SECURE_COOKIE="true"
+  else
+    export N8N_SECURE_COOKIE="false"
+  fi
+else
+  export N8N_SECURE_COOKIE
+fi
 export N8N_DIAGNOSTICS_ENABLED="${N8N_DIAGNOSTICS_ENABLED:-false}"
 export N8N_PERSONALIZATION_ENABLED="${N8N_PERSONALIZATION_ENABLED:-false}"
 export N8N_USER_FOLDER="$N8N_HOME"
@@ -55,6 +64,7 @@ echo "n8n port    : ${N8N_PORT}"
 echo "Public port : ${PUBLIC_PORT}"
 echo "Timezone    : ${GENERIC_TIMEZONE}"
 echo "Sync every  : ${SYNC_INTERVAL}s"
+echo "Startup wait: ${N8N_STARTUP_TIMEOUT}s"
 
 if [ -n "${HF_TOKEN:-}" ]; then
   echo "Restoring persisted n8n state from HF Dataset..."
@@ -100,7 +110,22 @@ N8N_PID=$!
 
 # Readiness probe
 echo "Waiting for n8n to be ready on port ${N8N_PORT}..."
+start_ts="$(date +%s)"
 until curl -sf "http://127.0.0.1:${N8N_PORT}/healthz" > /dev/null 2>&1; do
+  now_ts="$(date +%s)"
+  elapsed="$((now_ts - start_ts))"
+  if [ "$elapsed" -ge "$N8N_STARTUP_TIMEOUT" ]; then
+    echo "n8n did not become ready within ${N8N_STARTUP_TIMEOUT}s. Exiting."
+    kill -TERM "$N8N_PID" 2>/dev/null || true
+    wait "$N8N_PID" 2>/dev/null || true
+    exit 1
+  fi
+
+  if ! kill -0 "$N8N_PID" 2>/dev/null; then
+    echo "n8n process exited before readiness check passed. Exiting."
+    exit 1
+  fi
+
   sleep 1
 done
 echo "n8n is ready!"

@@ -36,7 +36,32 @@ def write_status(status: str, message: str) -> None:
         "message": message,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    STATUS_FILE.write_text(json.dumps(payload), encoding="utf-8")
+    tmp_path = STATUS_FILE.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(payload), encoding="utf-8")
+    tmp_path.replace(STATUS_FILE)
+
+
+def metadata_marker(root: Path) -> tuple[int, int, int]:
+    if not root.exists():
+        return (0, 0, 0)
+
+    file_count = 0
+    total_size = 0
+    newest_mtime = 0
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if rel.startswith(".cache/"):
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        file_count += 1
+        total_size += int(stat.st_size)
+        newest_mtime = max(newest_mtime, int(stat.st_mtime_ns))
+    return (file_count, total_size, newest_mtime)
 
 
 def dataset_repo_id() -> str:
@@ -159,16 +184,25 @@ def restore() -> bool:
         return False
 
 
-def sync_once(last_fingerprint: str | None = None) -> str:
+def sync_once(
+    last_fingerprint: str | None = None,
+    last_marker: tuple[int, int, int] | None = None,
+) -> tuple[str, tuple[int, int, int]]:
     if not HF_TOKEN:
         write_status("disabled", "HF_TOKEN is not configured.")
-        return last_fingerprint or ""
+        return (last_fingerprint or "", last_marker or (0, 0, 0))
 
     repo_id = ensure_repo_exists()
+
+    current_marker = metadata_marker(N8N_HOME)
+    if last_marker is not None and current_marker == last_marker:
+        write_status("synced", "No state changes detected.")
+        return (last_fingerprint or "", current_marker)
+
     current_fingerprint = fingerprint_dir(N8N_HOME)
     if last_fingerprint is not None and current_fingerprint == last_fingerprint:
         write_status("synced", "No state changes detected.")
-        return last_fingerprint
+        return (last_fingerprint, current_marker)
 
     write_status("syncing", f"Uploading state to {repo_id}")
     snapshot_dir = create_snapshot_dir(N8N_HOME)
@@ -184,7 +218,7 @@ def sync_once(last_fingerprint: str | None = None) -> str:
     finally:
         shutil.rmtree(snapshot_dir, ignore_errors=True)
     write_status("success", f"Uploaded state to {repo_id}")
-    return current_fingerprint
+    return (current_fingerprint, current_marker)
 
 
 def handle_signal(_sig, _frame) -> None:
@@ -196,11 +230,12 @@ def loop() -> int:
     signal.signal(signal.SIGINT, handle_signal)
 
     last_fingerprint = fingerprint_dir(N8N_HOME)
+    last_marker = metadata_marker(N8N_HOME)
     write_status("configured", f"Backup loop active with {INTERVAL}s interval.")
 
     while not STOP_EVENT.is_set():
         try:
-            last_fingerprint = sync_once(last_fingerprint)
+            last_fingerprint, last_marker = sync_once(last_fingerprint, last_marker)
         except Exception as exc:
             write_status("error", f"Sync failed: {exc}")
             print(f"Sync failed: {exc}", file=sys.stderr)
@@ -220,7 +255,7 @@ def main() -> int:
     if command == "restore":
         return 0 if restore() else 1
     if command == "sync-once":
-        sync_once(None)
+        sync_once(None, None)
         return 0
     if command == "loop":
         return loop()
