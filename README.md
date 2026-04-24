@@ -10,10 +10,8 @@ license: mit
 secrets:
   - name: HF_TOKEN
     description: HuggingFace token with write access (Settings > Tokens). Used for automatic backup.
-  - name: N8N_ENCRYPTION_KEY
-    description: (Optional) Secret key to encrypt your n8n credentials. Generate with 'openssl rand -hex 32'.
   - name: OUTBOUND_PROXY_URL
-    description: (Optional) Your Cloudflare Worker URL to bypass platform blocks (Telegram/Discord).
+    description: Your Cloudflare Worker URL to bypass platform blocks (Telegram/Discord).
 ---
 
 # 🔗 Hugging8n
