@@ -25,7 +25,7 @@ function dohResolve(hostname, callback) {
     return callback(null, cached.ip);
   }
 
-  const url = `https://1.1.1.1/dns-query?name=${encodeURIComponent(hostname)}&type=A`;
+  const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`;
   const req = https.get(
     url,
     { headers: { Accept: "application/dns-json" }, timeout: 15000 },
@@ -78,7 +78,8 @@ dns.lookup = function patchedLookup(hostname, options, callback) {
     hostname === "127.0.0.1" ||
     hostname === "::1" ||
     /^\d+\.\d+\.\d+\.\d+$/.test(hostname) ||
-    /^::/.test(hostname)
+    /^::/.test(hostname) ||
+    hostname === "cloudflare-dns.com"
   ) {
     return origLookup.call(dns, hostname, options, callback);
   }
@@ -92,6 +93,8 @@ dns.lookup = function patchedLookup(hostname, options, callback) {
       return callback(null, ip, 4);
     }
 
+    console.error(`[DNS-FIX] DoH failed for ${hostname}:`, dohErr ? dohErr.message : "no IP returned");
+    
     // 2) Fall back to system DNS if DoH fails
     origLookup.call(dns, hostname, options, callback);
   });
