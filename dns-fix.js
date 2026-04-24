@@ -2,8 +2,8 @@
  * DNS fix preload script for HF Spaces.
  *
  * Patches Node.js dns.lookup to:
- * 1. Try DNS-over-HTTPS (Cloudflare) first to bypass DNS sinkholing
- * 2. Fall back to system DNS if DoH fails
+ * 1. Try system DNS first
+ * 2. Fall back to DNS-over-HTTPS (Cloudflare) if system DNS fails
  *    (This is needed because HF Spaces intercepts/blocks some domains like
  *    WhatsApp web or Telegram API via standard UDP DNS).
  *
@@ -11,17 +11,8 @@
  */
 "use strict";
 
-console.error("[DNS-FIX] Loaded — DoH-first resolver + keep-alive patch active.");
-
 const dns = require("dns");
-const http = require("http");
 const https = require("https");
-
-// ── Keep-Alive Fix ────────────────────────────────────────────────────────────
-http.globalAgent = new http.Agent({ keepAlive: false });
-https.globalAgent = new https.Agent({ keepAlive: false });
-// ─────────────────────────────────────────────────────────────────────────────
-
 
 // In-memory cache for runtime DoH resolutions
 const runtimeCache = new Map(); // hostname -> { ip, expiry }
@@ -34,7 +25,7 @@ function dohResolve(hostname, callback) {
     return callback(null, cached.ip);
   }
 
-  const url = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`;
+  const url = `https://1.1.1.1/dns-query?name=${encodeURIComponent(hostname)}&type=A`;
   const req = https.get(
     url,
     { headers: { Accept: "application/dns-json" }, timeout: 15000 },
@@ -87,24 +78,31 @@ dns.lookup = function patchedLookup(hostname, options, callback) {
     hostname === "127.0.0.1" ||
     hostname === "::1" ||
     /^\d+\.\d+\.\d+\.\d+$/.test(hostname) ||
-    /^::/.test(hostname) ||
-    hostname === "cloudflare-dns.com"
+    /^::/.test(hostname)
   ) {
     return origLookup.call(dns, hostname, options, callback);
   }
 
-  // 1) Try DoH first to bypass HF DNS sinkholing (which returns fake IPs instead of ENOTFOUND)
-  dohResolve(hostname, (dohErr, ip) => {
-    if (!dohErr && ip) {
-      if (options.all) {
-        return callback(null, [{ address: ip, family: 4 }]);
-      }
-      return callback(null, ip, 4);
+  // 1) Try system DNS first
+  origLookup.call(dns, hostname, options, (err, address, family) => {
+    if (!err && address) {
+      return callback(null, address, family);
     }
 
-    console.error(`[DNS-FIX] DoH failed for ${hostname}:`, dohErr ? dohErr.message : "no IP returned");
-    
-    // 2) Fall back to system DNS if DoH fails
-    origLookup.call(dns, hostname, options, callback);
+    // 2) System DNS failed with ENOTFOUND or EAI_AGAIN — fall back to DoH
+    if (err && (err.code === "ENOTFOUND" || err.code === "EAI_AGAIN")) {
+      dohResolve(hostname, (dohErr, ip) => {
+        if (dohErr || !ip) {
+          return callback(err); // Return original error
+        }
+        if (options.all) {
+          return callback(null, [{ address: ip, family: 4 }]);
+        }
+        callback(null, ip, 4);
+      });
+    } else {
+      // Other DNS errors — pass through
+      callback(err, address, family);
+    }
   });
 };
