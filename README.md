@@ -9,7 +9,11 @@ pinned: true
 license: mit
 secrets:
   - name: HF_TOKEN
-    description: HuggingFace token with write access. Used for automatic backup.
+    description: HuggingFace token with write access (Settings > Tokens). Used for automatic backup.
+  - name: N8N_ENCRYPTION_KEY
+    description: (Optional) Secret key to encrypt your n8n credentials. Generate with 'openssl rand -hex 32'.
+  - name: OUTBOUND_PROXY_URL
+    description: (Optional) Your Cloudflare Worker URL to bypass platform blocks (Telegram/Discord).
 ---
 
 # 🔗 Hugging8n
@@ -35,6 +39,7 @@ secrets:
 ### Step 2: Configure Secrets
 
 Go to **Settings > Secrets** and add:
+
 - `HF_TOKEN`: Your HuggingFace token with **Write** access.
 
 ### Step 3: Initialize n8n
@@ -59,6 +64,7 @@ You can customize Hugging8n using Environment Variables (Settings > Variables):
 ## 🔐 Authentication & Security
 
 Hugging8n uses n8n's native user management.
+
 - The first person to access the n8n editor on a fresh install becomes the **Owner**.
 - **Important:** If you delete the Space and haven't set up `HF_TOKEN`, your users and workflows will be lost.
 - **Permissions:** The startup script uses `umask 0077` to ensure all sensitive data is restricted to the node user.
@@ -66,6 +72,7 @@ Hugging8n uses n8n's native user management.
 ## 💾 Persistent Backup
 
 Hugging8n automatically creates and maintains a private dataset in your Hugging Face account named `hugging8n-backup`.
+
 - **Sync Status:** You can check the current sync health directly on the Hugging8n Dashboard.
 - **Restoration:** On every startup, Hugging8n pulls the latest state from your dataset before launching n8n.
 
