@@ -11,7 +11,7 @@ secrets:
   - name: HF_TOKEN
     description: HuggingFace token with write access (Settings > Tokens). Used for automatic backup.
   - name: CLOUDFLARE_PROXY_URL
-    description: Your Cloudflare Worker URL to bypass platform blocks (Telegram/Discord).
+    description: Your Cloudflare Worker URL to bypass platform blocks (Telegram/Discord). Required for most external services.
 ---
 
 # 🔗 Hugging8n
@@ -55,8 +55,8 @@ You can customize Hugging8n using Environment Variables (Settings > Variables):
 | `SYNC_INTERVAL` | `180` | Backup frequency in seconds. |
 | `GENERIC_TIMEZONE` | `UTC` | Timezone for n8n. |
 | `N8N_LOG_LEVEL` | `error` | Set to `info` for more verbose logs. |
-| `CLOUDFLARE_PROXY_URL` | - | Your Cloudflare Worker URL (to bypass Discord/Telegram blocks). |
-| `OUTBOUND_PROXY_DOMAINS` | (default) | Comma-separated list of domains to proxy. Use `*` to proxy everything. |
+| `CLOUDFLARE_PROXY_URL` | (Required) | Your Cloudflare Worker URL (to bypass Discord/Telegram blocks). |
+| `CLOUDFLARE_PROXY_DOMAINS` | (default) | Comma-separated list of domains to proxy. Use `*` to proxy everything. |
 | `SPACE_HOST_OVERRIDE` | - | Override the detected host if using a custom domain. |
 
 ## 🔐 Authentication & Security
@@ -79,7 +79,7 @@ Hugging8n automatically creates and maintains a private dataset in your Hugging 
 **External Connectivity (Telegram/Discord/WhatsApp)**
 Hugging Face officially blocks outgoing connections to specific services on Free Tier Spaces. Hugging8n includes a transparent proxy system to bypass this automatically.
 
-👉 **[Read the Outbound Proxy Guide](./OUTBOUND_PROXY_GUIDE.md)**
+👉 **[Read the Cloudflare Proxy Guide](./CLOUDFLARE_PROXY_GUIDE.md)**
 *(Upgrading to a paid Space removes this firewall restriction entirely).*
 
 ## 🏗️ Architecture

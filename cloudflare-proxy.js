@@ -1,5 +1,5 @@
 /**
- * Outbound Fix: Transparent Proxy for Blocked Domains
+ * Cloudflare Proxy: Transparent Fix for Blocked Domains
  * 
  * Patches https.request to redirect traffic for Telegram/Discord
  * through a Cloudflare Worker proxy.
@@ -14,10 +14,10 @@ if (PROXY_URL && !PROXY_URL.startsWith("http://") && !PROXY_URL.startsWith("http
   PROXY_URL = `https://${PROXY_URL}`;
 }
 
-const DEBUG = process.env.OUTBOUND_PROXY_DEBUG === "true";
+const DEBUG = process.env.CLOUDFLARE_PROXY_DEBUG === "true" || process.env.OUTBOUND_PROXY_DEBUG === "true";
 
 // Allow user to define what to proxy. Use "*" to proxy everything except internal HF traffic.
-const PROXY_DOMAINS = process.env.OUTBOUND_PROXY_DOMAINS || "api.telegram.org,discord.com,discordapp.com,gateway.discord.gg,status.discord.com";
+const PROXY_DOMAINS = process.env.CLOUDFLARE_PROXY_DOMAINS || process.env.OUTBOUND_PROXY_DOMAINS || "api.telegram.org,discord.com,discordapp.com,gateway.discord.gg,status.discord.com";
 const BLOCKED_DOMAINS = PROXY_DOMAINS.split(",").map(d => d.trim());
 const PROXY_ALL = PROXY_DOMAINS === "*";
 
@@ -65,7 +65,7 @@ if (PROXY_URL) {
         const alreadyProxied = options._proxied || (headers && headers["x-target-host"]);
 
         if (shouldProxy && !alreadyProxied) {
-          if (DEBUG) console.log(`[outbound-fix] Redirecting ${hostname}${path} -> ${proxy.hostname}`);
+          if (DEBUG) console.log(`[cloudflare-proxy] Redirecting ${hostname}${path} -> ${proxy.hostname}`);
 
           // 3. Create fresh options for the proxied request
           const newOptions = (typeof options === "string" || options instanceof URL)
@@ -105,13 +105,13 @@ if (PROXY_URL) {
 
     if (DEBUG) {
       if (PROXY_ALL) {
-        console.log(`[outbound-fix] Transparent proxy active in WILDCARD mode (Proxying ALL except HF internal)`);
+        console.log(`[cloudflare-proxy] Transparent proxy active in WILDCARD mode (Proxying ALL except HF internal)`);
       } else {
-        console.log(`[outbound-fix] Transparent proxy active for: ${BLOCKED_DOMAINS.join(", ")}`);
+        console.log(`[cloudflare-proxy] Transparent proxy active for: ${BLOCKED_DOMAINS.join(", ")}`);
       }
-      console.log(`[outbound-fix] Target proxy: ${proxy.hostname}`);
+      console.log(`[cloudflare-proxy] Target proxy: ${proxy.hostname}`);
     }
   } catch (e) {
-    if (DEBUG) console.error(`[outbound-fix] Failed to initialize: ${e.message}`);
+    if (DEBUG) console.error(`[cloudflare-proxy] Failed to initialize: ${e.message}`);
   }
 }

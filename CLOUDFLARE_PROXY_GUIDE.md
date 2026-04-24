@@ -1,8 +1,8 @@
-# 🌐 Outbound Proxy Guide
+# 🌐 Cloudflare Proxy Guide
 
 Hugging Face Spaces officially blocks outgoing connections to specific services like **Telegram**, **WhatsApp**, and **Discord** on the free tier.
 
-Hugging8n includes a built-in **Transparent Outbound Proxy** that allows you to bypass these restrictions using a single Cloudflare Worker.
+Hugging8n includes a built-in **Transparent Cloudflare Proxy** that allows you to bypass these restrictions using a single Cloudflare Worker.
 
 ---
 
@@ -13,20 +13,20 @@ Hugging8n includes a built-in **Transparent Outbound Proxy** that allows you to 
 1. Log in to [dash.cloudflare.com](https://dash.cloudflare.com/).
 2. Go to **Workers & Pages** -> **Create Worker**.
 3. Name it (e.g., `h8n-proxy`).
-4. Paste the code from [outbound-proxy-worker.js](./outbound-proxy-worker.js) into the editor.
+4. Paste the code from [cloudflare-worker.js](./cloudflare-worker.js) into the editor.
 5. Click **Deploy**.
 6. Copy your Worker URL (e.g., `h8n-proxy.yourname.workers.dev`).
 
 ### Step 2: Configure Hugging8n
 
-Go to your Space **Settings** -> **Variables** and add:
+Go to your Space **Settings** -> **Variables** (or Secrets) and add:
 
-1. **`CLOUDFLARE_PROXY_URL`**:
+1. **`CLOUDFLARE_PROXY_URL`** (Required):
    - Value: `h8n-proxy.yourname.workers.dev` (You can omit the `https://`).
 
-2. **`OUTBOUND_PROXY_DOMAINS`** (Optional):
+2. **`CLOUDFLARE_PROXY_DOMAINS`** (Optional):
    - **Default**: Proxies Telegram and Discord only.
-   - **Wildcard Mode**: Set this to `*` to proxy **every single request** n8n makes to the outside world. This is the most reliable way to ensure no node ever gets blocked.
+   - **Wildcard Mode**: Set this to `*` to proxy **every single request** n8n makes to the outside world.
 
 ### Step 3: Restart Space
 
