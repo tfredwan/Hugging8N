@@ -14,7 +14,7 @@ secrets:
 
 # 🔗 Hugging8n
 
-**Self-hosted n8n workflow automation — free, no server needed.** Hugging8n runs [n8n](https://n8n.io) on HuggingFace Spaces Docker, serving a premium dashboard at `/` and the n8n editor at `/app/`.
+**Self-hosted n8n workflow automation — free, no server needed.** Hugging8n runs [n8n](https://n8n.io) on HuggingFace Spaces Docker, serving a premium dashboard at `/` and the n8n editor is accessible via the dashboard.
 
 ## ✨ Features
 
@@ -56,7 +56,7 @@ You can customize Hugging8n using Environment Variables (Settings > Variables):
 ## 🔐 Authentication & Security
 
 Hugging8n uses n8n's native user management.
-- The first person to visit `/app/` on a fresh install becomes the **Owner**.
+- The first person to access the n8n editor on a fresh install becomes the **Owner**.
 - **Important:** If you delete the Space and haven't set up `HF_TOKEN`, your users and workflows will be lost.
 - **Permissions:** The startup script uses `umask 0077` to ensure all sensitive data is restricted to the node user.
 
@@ -69,7 +69,7 @@ Hugging8n automatically creates and maintains a private dataset in your Hugging 
 ## 🏗️ Architecture
 
 - `/` : **Premium Dashboard** (Management & Monitoring)
-- `/app/` : **n8n Workflow Editor**
+- All other paths (e.g., `/home/workflows`) : Proxied to **n8n Workflow Editor**
 - `/health` : **Health Check** (Used by the internal proxy and external monitors)
 
 ---

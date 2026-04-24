@@ -28,6 +28,7 @@ RUN mkdir -p /home/node/app /home/node/.n8n && \
 WORKDIR /home/node/app
 
 COPY --chown=node:node health-server.js /home/node/app/health-server.js
+COPY --chown=node:node dns-fix.js /home/node/app/dns-fix.js
 COPY --chown=node:node n8n-sync.py /home/node/app/n8n-sync.py
 COPY --chown=node:node setup-uptimerobot.sh /home/node/app/setup-uptimerobot.sh
 COPY --chown=node:node start.sh /home/node/app/start.sh

@@ -35,8 +35,8 @@ export N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS="${N8N_ENFORCE_SETTINGS_FILE_PERMIS
 export GENERIC_TIMEZONE="${GENERIC_TIMEZONE:-${TZ:-UTC}}"
 export TZ="${TZ:-$GENERIC_TIMEZONE}"
 
-# Force IPv4 resolution to prevent Node.js IPv6 timeouts (Fixes "Client network socket disconnected" for Discord/outbound requests)
-export NODE_OPTIONS="--dns-result-order=ipv4first"
+# Force IPv4 resolution and apply custom DNS fallback for HF Spaces
+export NODE_OPTIONS="--dns-result-order=ipv4first --require /home/node/app/dns-fix.js"
 
 # Disable noisy or unnecessary services
 export N8N_PYTHON_NODES_ENABLED="${N8N_PYTHON_NODES_ENABLED:-false}"
