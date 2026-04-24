@@ -1,125 +1,108 @@
+/**
+ * DNS fix preload script for HF Spaces.
+ *
+ * Patches Node.js dns.lookup to:
+ * 1. Try system DNS first
+ * 2. Fall back to DNS-over-HTTPS (Cloudflare) if system DNS fails
+ *    (This is needed because HF Spaces intercepts/blocks some domains like
+ *    WhatsApp web or Telegram API via standard UDP DNS).
+ *
+ * Loaded via: NODE_OPTIONS="--require /opt/dns-fix.js"
+ */
 "use strict";
-console.error("[DNS-FIX] Loaded — DoH resolver + tls/net logging active.");
-const http = require("http");
+
+const dns = require("dns");
 const https = require("https");
-const { PassThrough } = require("stream");
 
-const blockedDomains = ["api.telegram.org", "discord.com", "discordapp.com", "web.whatsapp.com"];
+// In-memory cache for runtime DoH resolutions
+const runtimeCache = new Map(); // hostname -> { ip, expiry }
 
-function isBlocked(hostname) {
-  return hostname && blockedDomains.some((d) => hostname === d || hostname.endsWith(`.${d}`));
-}
+// DNS-over-HTTPS resolver
+function dohResolve(hostname, callback) {
+  // Check runtime cache
+  const cached = runtimeCache.get(hostname);
+  if (cached && cached.expiry > Date.now()) {
+    return callback(null, cached.ip);
+  }
 
-// Monkey-patch http.request and https.request
-const _origHttpRequest = http.request;
-const _origHttpsRequest = https.request;
-
-// Robust fetch-like wrapper using original (unpatched) http/https modules
-function originalRequest(protocol, url, options, body) {
-  const parsedUrl = new URL(url);
-  const origFn = protocol === "https:" ? _origHttpsRequest : _origHttpRequest;
-  
-  return new Promise((resolve, reject) => {
-    const req = origFn(parsedUrl, options, (res) => {
-      resolve(res);
-    });
-    req.on("error", reject);
-    if (body) req.write(body);
-    req.end();
+  const url = `https://1.1.1.1/dns-query?name=${encodeURIComponent(hostname)}&type=A`;
+  const req = https.get(
+    url,
+    { headers: { Accept: "application/dns-json" }, timeout: 15000 },
+    (res) => {
+      let body = "";
+      res.on("data", (c) => (body += c));
+      res.on("end", () => {
+        try {
+          const data = JSON.parse(body);
+          const aRecords = (data.Answer || []).filter((a) => a.type === 1);
+          if (aRecords.length === 0) {
+            return callback(new Error(`DoH: no A record for ${hostname}`));
+          }
+          const ip = aRecords[0].data;
+          const ttl = Math.max((aRecords[0].TTL || 300) * 1000, 60000);
+          runtimeCache.set(hostname, { ip, expiry: Date.now() + ttl });
+          callback(null, ip);
+        } catch (e) {
+          callback(new Error(`DoH parse error: ${e.message}`));
+        }
+      });
+    }
+  );
+  req.on("error", (e) => callback(new Error(`DoH request failed: ${e.message}`)));
+  req.on("timeout", () => {
+    req.destroy();
+    callback(new Error("DoH request timed out"));
   });
 }
 
-function transparentProxyRequest(protocol, origFn, ...args) {
-  let options = args[0];
-  let callback = args[1];
+// Monkey-patch dns.lookup
+const origLookup = dns.lookup;
 
-  if (typeof options === "string") {
-    try {
-      options = new URL(options);
-    } catch {
-      return origFn.apply(this, args);
+dns.lookup = function patchedLookup(hostname, options, callback) {
+  // Normalize arguments (options is optional, can be number or object)
+  if (typeof options === "function") {
+    callback = options;
+    options = {};
+  }
+  if (typeof options === "number") {
+    options = { family: options };
+  }
+  options = options || {};
+
+  // Skip patching for localhost, IPs, and internal domains
+  if (
+    !hostname ||
+    hostname === "localhost" ||
+    hostname === "0.0.0.0" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    /^\d+\.\d+\.\d+\.\d+$/.test(hostname) ||
+    /^::/.test(hostname)
+  ) {
+    return origLookup.call(dns, hostname, options, callback);
+  }
+
+  // 1) Try system DNS first
+  origLookup.call(dns, hostname, options, (err, address, family) => {
+    if (!err && address) {
+      return callback(null, address, family);
     }
-  } else if (options instanceof URL) {
-    // Already a URL
-  } else {
-    // Object options
-    options = { ...options };
-  }
 
-  // RECURSION GUARD: Check for a custom property we'll set
-  if (options && options.__isProxyRequest) {
-    return origFn.apply(this, args);
-  }
-
-  if (typeof callback !== "function" && typeof args[2] === "function") {
-    callback = args[2];
-  }
-
-  const hostname = options.hostname || options.host;
-  const path = options.path || options.pathname || "/";
-
-  if (isBlocked(hostname)) {
-    console.error(`[DNS-FIX] Transparently proxying ${protocol}//${hostname}${path}`);
-
-    const requestUrl = `${protocol}//${hostname}${path}`;
-    const requestHeaders = { ...options.headers };
-    
-    const reqStream = new PassThrough();
-    
-    let requestBody = Buffer.alloc(0);
-    reqStream.on("data", (chunk) => {
-      requestBody = Buffer.concat([requestBody, chunk]);
-    });
-
-    reqStream.on("finish", async () => {
-      try {
-        const fetchRes = await originalRequest(protocol, requestUrl, {
-          method: options.method || "GET",
-          headers: requestHeaders,
-          __isProxyRequest: true, // Internal flag to prevent recursion
-        }, options.method !== "GET" && options.method !== "HEAD" ? requestBody : undefined);
-
-        if (callback) callback(fetchRes);
-        reqStream.emit("response", fetchRes);
-        // fetchRes is already an IncomingMessage (readable stream)
-      } catch (err) {
-        console.error(`[DNS-FIX] Proxy error for ${requestUrl}: ${err.message}`);
-        reqStream.emit("error", err);
-      }
-    });
-
-    // Mock ClientRequest methods
-    reqStream.abort = () => reqStream.destroy();
-    reqStream.end = (chunk) => {
-      if (chunk) reqStream.write(chunk);
-      reqStream.end();
-    };
-    reqStream.setTimeout = (ms, cb) => { if (cb) setTimeout(cb, ms); return reqStream; };
-    reqStream.setNoDelay = () => reqStream;
-    reqStream.setSocketKeepAlive = () => reqStream;
-
-    return reqStream;
-  }
-
-  return origFn.apply(this, args);
-}
-
-http.request = function (...args) {
-  return transparentProxyRequest("http:", _origHttpRequest, ...args);
-};
-
-https.request = function (...args) {
-  return transparentProxyRequest("https:", _origHttpsRequest, ...args);
-};
-
-http.get = function (...args) {
-  const req = http.request(...args);
-  req.end();
-  return req;
-};
-
-https.get = function (...args) {
-  const req = https.request(...args);
-  req.end();
-  return req;
+    // 2) System DNS failed with ENOTFOUND or EAI_AGAIN — fall back to DoH
+    if (err && (err.code === "ENOTFOUND" || err.code === "EAI_AGAIN")) {
+      dohResolve(hostname, (dohErr, ip) => {
+        if (dohErr || !ip) {
+          return callback(err); // Return original error
+        }
+        if (options.all) {
+          return callback(null, [{ address: ip, family: 4 }]);
+        }
+        callback(null, ip, 4);
+      });
+    } else {
+      // Other DNS errors — pass through
+      callback(err, address, family);
+    }
+  });
 };
