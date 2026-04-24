@@ -14,14 +14,22 @@ function isBlocked(hostname) {
 const _origHttpRequest = http.request;
 const _origHttpsRequest = https.request;
 
-const { AsyncLocalStorage } = require("async_hooks");
-const asyncStorage = new AsyncLocalStorage();
+// Robust fetch-like wrapper using original (unpatched) http/https modules
+function originalRequest(protocol, url, options, body) {
+  const parsedUrl = new URL(url);
+  const origFn = protocol === "https:" ? _origHttpsRequest : _origHttpRequest;
+  
+  return new Promise((resolve, reject) => {
+    const req = origFn(parsedUrl, options, (res) => {
+      resolve(res);
+    });
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
 
 function transparentProxyRequest(protocol, origFn, ...args) {
-  if (asyncStorage.getStore()) {
-    return origFn.apply(this, args);
-  }
-
   let options = args[0];
   let callback = args[1];
 
@@ -38,6 +46,11 @@ function transparentProxyRequest(protocol, origFn, ...args) {
     options = { ...options };
   }
 
+  // RECURSION GUARD: Check for a custom property we'll set
+  if (options && options.__isProxyRequest) {
+    return origFn.apply(this, args);
+  }
+
   if (typeof callback !== "function" && typeof args[2] === "function") {
     callback = args[2];
   }
@@ -46,56 +59,36 @@ function transparentProxyRequest(protocol, origFn, ...args) {
   const path = options.path || options.pathname || "/";
 
   if (isBlocked(hostname)) {
-    console.error(`[DNS-FIX] Transparently proxying ${protocol}//${hostname}${path} via fetch()`);
+    console.error(`[DNS-FIX] Transparently proxying ${protocol}//${hostname}${path}`);
 
     const requestUrl = `${protocol}//${hostname}${path}`;
     const requestHeaders = { ...options.headers };
     
     const reqStream = new PassThrough();
-    const resStream = new PassThrough();
     
     let requestBody = Buffer.alloc(0);
     reqStream.on("data", (chunk) => {
       requestBody = Buffer.concat([requestBody, chunk]);
     });
 
-    reqStream.on("finish", () => {
-      asyncStorage.run(true, async () => {
-        try {
-          const fetchRes = await fetch(requestUrl, {
-            method: options.method || "GET",
-            headers: requestHeaders,
-            body: options.method !== "GET" && options.method !== "HEAD" ? requestBody : undefined,
-            redirect: "manual",
-          });
+    reqStream.on("finish", async () => {
+      try {
+        const fetchRes = await originalRequest(protocol, requestUrl, {
+          method: options.method || "GET",
+          headers: requestHeaders,
+          __isProxyRequest: true, // Internal flag to prevent recursion
+        }, options.method !== "GET" && options.method !== "HEAD" ? requestBody : undefined);
 
-          resStream.statusCode = fetchRes.status;
-          resStream.statusMessage = fetchRes.statusText;
-          resStream.headers = Object.fromEntries(fetchRes.headers.entries());
-          resStream.rawHeaders = [];
-          for (const [k, v] of fetchRes.headers.entries()) {
-            resStream.rawHeaders.push(k, v);
-          }
-
-          if (callback) callback(resStream);
-          reqStream.emit("response", resStream);
-
-          if (fetchRes.body) {
-            const reader = fetchRes.body.getReader();
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              resStream.write(value);
-            }
-          }
-          resStream.end();
-        } catch (err) {
-          console.error(`[DNS-FIX] Proxy error for ${requestUrl}: ${err.message}`);
-          reqStream.emit("error", err);
-        }
-      });
+        if (callback) callback(fetchRes);
+        reqStream.emit("response", fetchRes);
+        // fetchRes is already an IncomingMessage (readable stream)
+      } catch (err) {
+        console.error(`[DNS-FIX] Proxy error for ${requestUrl}: ${err.message}`);
+        reqStream.emit("error", err);
+      }
     });
 
+    // Mock ClientRequest methods
     reqStream.abort = () => reqStream.destroy();
     reqStream.end = (chunk) => {
       if (chunk) reqStream.write(chunk);
