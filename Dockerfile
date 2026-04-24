@@ -30,9 +30,10 @@ WORKDIR /home/node/app
 
 COPY --chown=node:node health-server.js /home/node/app/health-server.js
 COPY --chown=node:node dns-fix.js /opt/dns-fix.js
+COPY --chown=node:node outbound-fix.js /opt/outbound-fix.js
 
-# Set NODE_OPTIONS after dns-fix.js is copied so it doesn't break npm install during build
-ENV NODE_OPTIONS="--require /opt/dns-fix.js"
+# Set NODE_OPTIONS after preload scripts are copied
+ENV NODE_OPTIONS="--require /opt/dns-fix.js --require /opt/outbound-fix.js"
 COPY --chown=node:node n8n-sync.py /home/node/app/n8n-sync.py
 COPY --chown=node:node setup-uptimerobot.sh /home/node/app/setup-uptimerobot.sh
 COPY --chown=node:node start.sh /home/node/app/start.sh

@@ -55,6 +55,7 @@ echo "n8n port    : ${N8N_PORT}"
 echo "Public port : ${PUBLIC_PORT}"
 echo "Timezone    : ${GENERIC_TIMEZONE}"
 echo "Sync every  : ${SYNC_INTERVAL}s"
+echo "Outbound Prx: ${OUTBOUND_PROXY_URL:-not configured (Telegram/Discord may fail)}"
 
 if [ -n "${HF_TOKEN:-}" ]; then
   echo "Restoring persisted n8n state from HF Dataset..."
