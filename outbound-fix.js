@@ -14,6 +14,8 @@ if (PROXY_URL && !PROXY_URL.startsWith("http://") && !PROXY_URL.startsWith("http
   PROXY_URL = `https://${PROXY_URL}`;
 }
 
+const DEBUG = process.env.OUTBOUND_PROXY_DEBUG === "true";
+
 // Allow user to define what to proxy. Use "*" to proxy everything except internal HF traffic.
 const PROXY_DOMAINS = process.env.OUTBOUND_PROXY_DOMAINS || "api.telegram.org,discord.com,discordapp.com,gateway.discord.gg,status.discord.com";
 const BLOCKED_DOMAINS = PROXY_DOMAINS.split(",").map(d => d.trim());
@@ -63,7 +65,7 @@ if (PROXY_URL) {
         const alreadyProxied = options._proxied || (headers && headers["x-target-host"]);
 
         if (shouldProxy && !alreadyProxied) {
-          console.log(`[outbound-fix] Redirecting ${hostname}${path} -> ${proxy.hostname}`);
+          if (DEBUG) console.log(`[outbound-fix] Redirecting ${hostname}${path} -> ${proxy.hostname}`);
 
           // 3. Create fresh options for the proxied request
           const newOptions = (typeof options === "string" || options instanceof URL)
@@ -101,15 +103,15 @@ if (PROXY_URL) {
     https.request = patch(originalHttpsRequest, true);
     http.request = patch(originalHttpRequest, false);
 
-    if (PROXY_ALL) {
-      console.log(`[outbound-fix] Transparent proxy active in WILDCARD mode (Proxying ALL except HF internal)`);
-    } else {
-      console.log(`[outbound-fix] Transparent proxy active for: ${BLOCKED_DOMAINS.join(", ")}`);
+    if (DEBUG) {
+      if (PROXY_ALL) {
+        console.log(`[outbound-fix] Transparent proxy active in WILDCARD mode (Proxying ALL except HF internal)`);
+      } else {
+        console.log(`[outbound-fix] Transparent proxy active for: ${BLOCKED_DOMAINS.join(", ")}`);
+      }
+      console.log(`[outbound-fix] Target proxy: ${proxy.hostname}`);
     }
-    console.log(`[outbound-fix] Target proxy: ${proxy.hostname}`);
   } catch (e) {
-    console.error(`[outbound-fix] Failed to initialize: ${e.message}`);
+    if (DEBUG) console.error(`[outbound-fix] Failed to initialize: ${e.message}`);
   }
-} else {
-  console.log("[outbound-fix] OUTBOUND_PROXY_URL not set. Transparent proxy disabled.");
 }
