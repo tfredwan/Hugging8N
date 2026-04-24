@@ -662,8 +662,9 @@ server.on("upgrade", (req, socket, head) => {
   proxySocket.on("error", () => socket.destroy());
 });
 
+// Disable overall timeout for SSE, but keep keep-alive healthy
 server.timeout = 0;
-server.keepAliveTimeout = 0;
+server.keepAliveTimeout = 65000;
 server.listen(PORT, "0.0.0.0", () =>
   console.log(`Namespace Proxy on ${PORT} -> n8n on ${TARGET_PORT}`),
 );
