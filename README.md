@@ -68,10 +68,10 @@ Hugging8n automatically creates and maintains a private dataset in your Hugging 
 
 ## ⚠️ Known Limitations & Workarounds
 
-**Discord Webhooks**
-Hugging Face officially blocks outgoing connections to Discord on Free Tier Spaces. To use the Discord node, you must route your traffic through a simple, free proxy.
+**Discord & Telegram Webhooks Blocked by Hugging Face**
+Hugging Face blocks outgoing connections to Discord and Telegram on Free Tier Spaces via TLS/SNI inspection — the TCP connection opens but the TLS handshake is silently dropped when the target hostname is detected. To use these services, you must route traffic through a proxy with a different hostname.
 
-👉 **[Read the Guide: How to Create a Free Discord Proxy in 2 minutes](./DISCORD_PROXY_GUIDE.md)**
+👉 **[Read the Guide: How to Create a Free Cloudflare Proxy in 2 minutes](./DISCORD_PROXY_GUIDE.md)**
 *(Upgrading to a paid Space removes this firewall restriction entirely).*
 
 ## 🏗️ Architecture

@@ -11,7 +11,7 @@
  */
 "use strict";
 
-console.error("[DNS-FIX] dns-fix.js preload script loaded successfully.");
+console.error("[DNS-FIX] Loaded — DoH-first resolver + keep-alive patch active.");
 
 const dns = require("dns");
 const http = require("http");
@@ -22,29 +22,6 @@ http.globalAgent = new http.Agent({ keepAlive: false });
 https.globalAgent = new https.Agent({ keepAlive: false });
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── TCP Connection Diagnostics ────────────────────────────────────────────────
-// Temporarily patch net.createConnection to log all outgoing TCP connections
-// and their errors so we can identify the exact IP and failure mode.
-const net = require("net");
-const _origConnect = net.createConnection.bind(net);
-net.createConnection = function (options, ...args) {
-  const host = options.host || options;
-  const port = options.port;
-  // Only log external connections (skip loopback)
-  if (host && host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
-    console.error(`[DNS-FIX] TCP connect → ${host}:${port}`);
-    const sock = _origConnect(options, ...args);
-    sock.on("connect", () =>
-      console.error(`[DNS-FIX] TCP connected ✓ ${host}:${port}`),
-    );
-    sock.on("error", (err) =>
-      console.error(`[DNS-FIX] TCP error ✗ ${host}:${port} — ${err.code}: ${err.message}`),
-    );
-    return sock;
-  }
-  return _origConnect(options, ...args);
-};
-// ─────────────────────────────────────────────────────────────────────────────
 
 // In-memory cache for runtime DoH resolutions
 const runtimeCache = new Map(); // hostname -> { ip, expiry }
