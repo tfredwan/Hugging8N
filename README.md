@@ -25,6 +25,7 @@ secrets:
 ## Table of Contents
 
 - [✨ Features](#-features)
+- [🎥 Video Tutorial](#-video-tutorial)
 - [🚀 Quick Start](#-quick-start)
 - [🌐 Cloudflare Proxy Setup](#-cloudflare-proxy-setup)
 - [💾 Persistent Backup](#-persistent-backup)
@@ -46,6 +47,10 @@ secrets:
 - 📊 **Premium Dashboard:** Beautiful Web UI at `/` for real-time monitoring of uptime, sync health, and n8n status.
 - ⏰ **Easy Keep-Alive:** Set up a one-time UptimeRobot monitor directly from the dashboard to keep your free Space awake.
 - 🐳 **Optimized Infrastructure:** Minimal resource usage with clean startup logs and production-ready proxying.
+
+## 🎥 Video Tutorial
+
+Watch a quick walkthrough on YouTube: [Deploying Hugging8n on HF Spaces](https://youtu.be/cfMruo5dlF8?si=elM6Mnmh0oQIyxp2).
 
 ## 🚀 Quick Start
 
