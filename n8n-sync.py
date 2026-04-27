@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 import signal
@@ -13,13 +14,23 @@ import threading
 from pathlib import Path
 
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+# huggingface_hub reads HF_HUB_VERBOSITY at import time and overrides any
+# logging.getLogger().setLevel() we apply afterwards. Set it before import
+# to silence the "No files have been modified..." spam from
+# upload_large_folder workers (logger.warning level).
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 
 from huggingface_hub import HfApi, snapshot_download, upload_folder
-from huggingface_hub.errors import RepositoryNotFoundError
+from huggingface_hub.errors import HfHubHTTPError, RepositoryNotFoundError
+
+# Belt-and-suspenders: also raise the level after import in case the env var
+# wasn't honored (older hub versions, or message logged via a sub-logger).
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 N8N_HOME = Path(os.environ.get("N8N_USER_FOLDER", "/home/node/.n8n"))
 STATUS_FILE = Path("/tmp/hugging8n-sync-status.json")
 INTERVAL = int(os.environ.get("SYNC_INTERVAL", "180"))
+INITIAL_DELAY = int(os.environ.get("SYNC_START_DELAY", "10"))
 HF_TOKEN = os.environ.get("HF_TOKEN", "").strip()
 HF_USERNAME = (
     os.environ.get("HF_USERNAME", "").strip()
@@ -28,6 +39,7 @@ HF_USERNAME = (
 BACKUP_DATASET_NAME = os.environ.get("BACKUP_DATASET_NAME", "hugging8n-backup").strip()
 HF_API = HfApi(token=HF_TOKEN) if HF_TOKEN else None
 STOP_EVENT = threading.Event()
+_REPO_ID_CACHE: str | None = None
 
 
 def write_status(status: str, message: str) -> None:
@@ -64,14 +76,29 @@ def metadata_marker(root: Path) -> tuple[int, int, int]:
     return (file_count, total_size, newest_mtime)
 
 
-def dataset_repo_id() -> str:
-    if not HF_USERNAME:
-        raise RuntimeError("HF_USERNAME or SPACE_AUTHOR_NAME is required for backup repo naming")
-    return f"{HF_USERNAME}/{BACKUP_DATASET_NAME}"
+def resolve_backup_namespace() -> str:
+    global _REPO_ID_CACHE
+    if _REPO_ID_CACHE:
+        return _REPO_ID_CACHE
+
+    namespace = HF_USERNAME
+    if not namespace and HF_API is not None:
+        whoami = HF_API.whoami()
+        namespace = whoami.get("name") or whoami.get("user") or ""
+
+    namespace = str(namespace).strip()
+    if not namespace:
+        raise RuntimeError(
+            "Could not determine the Hugging Face username for backups. "
+            "Set HF_USERNAME or use a token tied to your account."
+        )
+
+    _REPO_ID_CACHE = f"{namespace}/{BACKUP_DATASET_NAME}"
+    return _REPO_ID_CACHE
 
 
 def ensure_repo_exists() -> str:
-    repo_id = dataset_repo_id()
+    repo_id = resolve_backup_namespace()
     try:
         HF_API.repo_info(repo_id=repo_id, repo_type="dataset")
     except RepositoryNotFoundError:
@@ -138,7 +165,7 @@ def restore() -> bool:
         write_status("disabled", "HF_TOKEN is not configured.")
         return False
 
-    repo_id = dataset_repo_id()
+    repo_id = resolve_backup_namespace()
     write_status("restoring", f"Restoring state from {repo_id}")
 
     try:
@@ -178,6 +205,13 @@ def restore() -> bool:
     except RepositoryNotFoundError:
         write_status("fresh", f"Backup dataset {repo_id} does not exist yet.")
         return True
+    except HfHubHTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            write_status("fresh", f"Backup dataset {repo_id} does not exist yet.")
+            return True
+        write_status("error", f"Restore failed: {exc}")
+        print(f"Restore failed: {exc}", file=sys.stderr)
+        return False
     except Exception as exc:
         write_status("error", f"Restore failed: {exc}")
         print(f"Restore failed: {exc}", file=sys.stderr)
@@ -229,9 +263,19 @@ def loop() -> int:
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
 
+    try:
+        repo_id = resolve_backup_namespace()
+        write_status("configured", f"Backup loop active for {repo_id} with {INTERVAL}s interval.")
+    except Exception as exc:
+        write_status("error", str(exc))
+        print(f"Sync error: {exc}")
+        return 1
+
     last_fingerprint = fingerprint_dir(N8N_HOME)
     last_marker = metadata_marker(N8N_HOME)
-    write_status("configured", f"Backup loop active with {INTERVAL}s interval.")
+
+    time.sleep(INITIAL_DELAY)
+    print(f"State sync started: every {INTERVAL}s -> {repo_id}")
 
     while not STOP_EVENT.is_set():
         try:
@@ -239,7 +283,7 @@ def loop() -> int:
         except Exception as exc:
             write_status("error", f"Sync failed: {exc}")
             print(f"Sync failed: {exc}", file=sys.stderr)
-        
+
         if STOP_EVENT.wait(INTERVAL):
             break
 
@@ -255,8 +299,13 @@ def main() -> int:
     if command == "restore":
         return 0 if restore() else 1
     if command == "sync-once":
-        sync_once(None, None)
-        return 0
+        try:
+            sync_once()
+            return 0
+        except Exception as exc:
+            write_status("error", f"Shutdown sync failed: {exc}")
+            print(f"State sync: shutdown sync failed: {exc}")
+            return 1
     if command == "loop":
         return loop()
 
