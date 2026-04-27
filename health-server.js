@@ -78,6 +78,14 @@ function isRateLimited(req) {
   return recent.length > UPTIMEROBOT_RATE_MAX;
 }
 
+// Prune stale rate-limit buckets every 5 minutes to prevent unbounded growth.
+setInterval(() => {
+  const cutoff = Date.now() - UPTIMEROBOT_RATE_WINDOW_MS;
+  for (const [ip, timestamps] of uptimerobotRateMap) {
+    if (timestamps.every((ts) => ts < cutoff)) uptimerobotRateMap.delete(ip);
+  }
+}, 5 * 60 * 1000).unref();
+
 function isAllowedUptimeSetupOrigin(req) {
   const host = String(req.headers.host || "").toLowerCase();
   const origin = String(req.headers.origin || "").toLowerCase();

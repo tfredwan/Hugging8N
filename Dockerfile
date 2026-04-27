@@ -30,7 +30,6 @@ WORKDIR /home/node/app
 
 COPY --chown=node:node health-server.js /home/node/app/health-server.js
 COPY --chown=node:node cloudflare-proxy.js /opt/cloudflare-proxy.js
-COPY --chown=node:node cloudflare-worker.js /home/node/app/cloudflare-worker.js
 COPY --chown=node:node cloudflare-proxy-setup.py /home/node/app/cloudflare-proxy-setup.py
 
 # Set NODE_OPTIONS after preload scripts are copied
